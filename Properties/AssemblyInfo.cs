@@ -6,11 +6,11 @@ using System.Runtime.InteropServices;
 // set di attributi. Modificare i valori di questi attributi per modificare le informazioni
 // associate a un assembly.
 [assembly: AssemblyTitle("LocalDns")]
-[assembly: AssemblyDescription("Host a DNS server on your pc")]
+[assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Exelix11")]
+[assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("LocalDns")]
-[assembly: AssemblyCopyright("by Exelix11")]
+[assembly: AssemblyCopyright("Copyright ©  2016")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // Se il progetto viene esposto a COM, il GUID seguente verrà utilizzato come ID della libreria dei tipi
-[assembly: Guid("0cf31143-8b03-4019-aada-b0cb3c8f8152")]
+[assembly: Guid("703ce38e-c7c5-452a-920c-0883fc91c855")]
 
 // Le informazioni sulla versione di un assembly sono costituite dai seguenti quattro valori:
 //
