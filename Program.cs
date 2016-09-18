@@ -1,15 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
-using Microsoft.VisualBasic;
-using System.Collections;
-using System.Data;
-using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
-using System.IO;
-using System.Net.NetworkInformation;
+using System.Threading.Tasks;
 
 namespace LocalDns
 {
@@ -19,166 +13,116 @@ namespace LocalDns
         {
             Console.Title = "LocalDns";
             Console.WriteLine("LocalDns By Exelix11");
-            if (args.Length > 2) PrintHelp();
-            else if (args.Length == 0)
+            if (args.Length > 3) { PrintHelp(); return; }
+            Dictionary<string, DnsSettings> rules = null;
+            DnsCore Dns = new LocalDns.DnsCore();
+            if (args.Length == 0)
             {
-                if (File.Exists("List.txt")) RunDns(File.ReadAllLines("List.txt"), "127.0.0.1");
-                else PrintHelp();
+                if (File.Exists("Rules.txt"))
+                {
+                    rules = ParseRules("Rules.txt");
+                }
+                else { PrintHelp(); return; }
             }
             else
             {
-                RunDns(File.ReadAllLines(args[0]), args.Length == 1 ? "127.0.0.1" : args[1]);
+                if (File.Exists(args[0]))
+                {
+                    rules = ParseRules(args[0]);
+                }
+                else { Console.WriteLine(args[0] + "not found !"); PrintHelp(); return; }
+                if (args.Length > 1)
+                {
+                    Dns.DenyNotInRules = Convert.ToBoolean(args[1]);
+                }
+                if (args.Length == 3) Dns.LocalHostIp = args[2].Trim();
             }
+            if (rules != null) Dns.rules = rules;
+            Dns.FireEvents = true;
+            Dns.ResolvedIp += ResolvedIp;
+            Dns.ConnectionRequest += ConnectionRequest;
+            Dns.ServerReady += ServerReady;
+            Dns.RunDns();
         }
 
-        static void PrintHelp()
-        {
-            Console.WriteLine("_____________________________________________");
-            Console.WriteLine("Usage:");
-            Console.WriteLine("LocalDns.exe [blacklist as txt] [ip]");
-            Console.WriteLine("Redirects every address in the list to 127.0.0.1 or the ip you set, the list must contain one address per line without 'www', List.txt is loaded by default");
-            Console.WriteLine("Addresses not in the list will be resolved with your pc's dns");
-            Console.ReadKey();
-        }
-
-        static void RunDns(string[] BlockList, string localhost)
+        private static void ServerReady(Dictionary<string, string> e)
         {
             Console.WriteLine("Starting DNS... (Press CTRL + C to close)");
             Console.Title = "LocalDns, press CTRL + C to exit";
             Console.WriteLine("_____________________________________________");
-            Socket s = new Socket(SocketType.Dgram, ProtocolType.Udp);
-            EndPoint e = new IPEndPoint(IPAddress.Any, 53);
-            s.ReceiveBufferSize = 1023;
-            s.Bind(e);
-            Dictionary<string, string> IPs = GetIPs();
-            switch (IPs.Keys.Count)
+            switch (e.Keys.Count)
             {
                 case 0:
                     Console.WriteLine("Socket ready");
                     Console.WriteLine("WARNING: no local ip address found");
                     break;
                 case 1:
-                    Console.WriteLine("Socket ready, running on " + IPs.Keys.ToArray()[0]);
+                    Console.WriteLine("Socket ready, running on " + e.Keys.ToArray()[0]);
                     break;
                 default:
                     Console.WriteLine("Socket ready, running on: (an ip for every network interface)");
-                    foreach (string k in IPs.Keys.ToArray()) Console.WriteLine(k + " on " + IPs[k]);
+                    foreach (string k in e.Keys.ToArray()) Console.WriteLine(k + " on " + e[k]);
                     break;
             }
             Console.WriteLine("_____________________________________________");
-            while (true)
+        }
+
+        static Dictionary<string, DnsSettings> ParseRules(string Filename)
+        {
+            Dictionary<string, DnsSettings> res = new Dictionary<string, DnsSettings>();
+            string[] rules = File.ReadAllLines(Filename);
+            foreach (string s in rules)
             {
-                byte[] data = new byte[1024];
-                s.ReceiveFrom(data, SocketFlags.None, ref e);
-                Console.WriteLine("Got request from: " + e.ToString());
-                int i = s.ReceiveBufferSize;
-                while (data[i] == 0)
+                string[] split = s.Split(',');
+                DnsSettings dns = new DnsSettings();
+                dns.Url = split[0].Trim();
+                switch (split[1].Trim().ToLower())
                 {
-                    Array.Resize(ref data, i);
-                    i -= 1;
+                    case "deny":
+                        dns.Mode = HandleMode.Deny;
+                        break;
+                    case "allow":
+                        dns.Mode = HandleMode.Allow;
+                        break;
+                    case "redirect":
+                        dns.Mode = HandleMode.Redirect;
+                        dns.Address = split[2].Trim();
+                        break;
+                    default :
+                        throw new Exception("Can't parse rules !");
                 }
-                DnsAnswer server = new DnsAnswer(data);
-                string fullname = string.Join(".", server.addr);
-                byte[] res;
-                if (BlockList.Contains(fullname.ToLower())) res = server.GetResponse(localhost, "");
-                else res = server.GetResponse(localhost, fullname);
-                Console.WriteLine("Resolved: " + fullname + " to: " + server.IpRes);
-                s.SendTo(res, e);
+                res.Add(dns.Url, dns);
             }
+            return res;
         }
 
-        static Dictionary<string,string> GetIPs()
+        static void PrintHelp()
         {
-            Dictionary<string, string> addresses = new Dictionary<string, string>();
-            NetworkInterface[] allInterfaces = NetworkInterface.GetAllNetworkInterfaces();
-            foreach (NetworkInterface n in allInterfaces)
-            {
-                if (n.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 || n.NetworkInterfaceType == NetworkInterfaceType.Ethernet)
-                {
-                    foreach (UnicastIPAddressInformation ip in n.GetIPProperties().UnicastAddresses)
-                    {
-                        if (ip.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-                        {
-                            addresses.Add(ip.Address.ToString(), n.Name);
-                        }
-                    }
-                }
-            }
-            return addresses;
-        }
-    }
-
-    class DnsAnswer
-    {
-        public List<string> addr = new List<string>();
-        public string IpRes = "";
-        byte[] Req;
-
-        public DnsAnswer(byte[] Request)
-        {
-            Req = Request;
-            int type = (Req[2] >> 3) & 0xF;
-            if (type == 0)
-            {
-                int lenght = Req[12];
-                int i = 12;
-                while (lenght > 0)
-                {
-                    byte[] tmp = new byte[i + lenght];
-                    Buffer.BlockCopy(Req, i + 1, tmp, 0, lenght);
-                    string partialaddr = GetStringTrim(tmp);
-                    if (partialaddr != null) addr.Add(partialaddr);
-                    i += (lenght + 1);
-                    lenght = Req[i];
-                }
-            }
+            Console.WriteLine("_____________________________________________");
+            Console.WriteLine("Usage:");
+            Console.WriteLine("LocalDns.exe [rules, default is : Rules.txt] [BlockNotInList: True|False, default is: false] [Localhost, default is 127.0.0.1]");
+            Console.WriteLine("The rules file must be a txt, each line must contain a rule in this format:\r\n"+
+                "*url*,*action: Deny|Allow|Redirect*,[Optional RedirectUrl]\r\n"+
+                "   Examples:\r\n"+
+                "   Example.com,Deny\r\n" +
+                "   This will redirect every Examples.com query to the Localhost address\r\n" +
+                "   Example.com,Redirect,Examples2.com\r\n" +
+                "   This will redirect Example.com to Examples2.com\r\n"+
+                "   Example.com,Allow\r\n"+
+                "   This will resolve Example.com to the real address, use this with BlockNotInList set to true, so every other site will be redirected to LocalHost");
+            Console.WriteLine("BlockNotInList: If set to true will redirect to Localhost urls not in the rules file, else will return the real address");
+            Console.WriteLine("Localhost: the ip to redirect every blocked url");
+            Console.ReadKey();
         }
 
-        string GetStringTrim(byte[] str)
+        private static void ResolvedIp(DnsEventArgs e)
         {
-            int i = str.Length - 1;
-            while (str[i] == 0)
-            {
-                Array.Resize(ref str, i);
-                i -= 1;
-            }
-            string res = Encoding.ASCII.GetString(str);
-            if (res.ToLower() == "www") return null;
-            else return res;
+            Console.WriteLine("Resolved: " + e.Url + " to: " + e.Host);
         }
 
-        public byte[] GetResponse(string ip, string redirect)
+        private static void ConnectionRequest(DnsEventArgs e)
         {
-            List<byte> ans = new List<byte>();
-            //http://www.ccs.neu.edu/home/amislove/teaching/cs4700/fall09/handouts/project1-primer.pdf
-            //Header
-            ans.AddRange(new byte[] { Req[0], Req[1] });//ID
-            ans.AddRange(new byte[] { 0x81, 0x80 }); //OPCODE & RCODE etc...
-            ans.AddRange(new byte[] { Req[4], Req[5] });//QDCount
-            ans.AddRange(new byte[] { Req[4], Req[5] });//ANCount
-            ans.AddRange(new byte[4]);//NSCount & ARCount
-
-            for (int i = 12; i < Req.Length; i++) ans.Add(Req[i]);
-            ans.AddRange(new byte[] { 0xC0, 0xC });
-            ans.AddRange(new byte[] { 0, 1, 0, 1, 0, 0, 0, 0x3c, 0, 4 }); //60 seconds
-            if (redirect != "")
-                try { ans.AddRange(ParseIp(Dns.GetHostEntry(redirect).AddressList[0].ToString())); }
-                catch { ans.AddRange(ParseIp(ip)); }
-            else ans.AddRange(ParseIp(ip));
-
-            return ans.ToArray();
-        }
-
-        byte[] ParseIp(string ip)
-        {
-            byte[] ip4 = new byte[4];
-            string[] ipstring = ip.Split('.');
-            ip4[0] = Byte.Parse(ipstring[0]);
-            ip4[1] = Byte.Parse(ipstring[1]);
-            ip4[2] = Byte.Parse(ipstring[2]);
-            ip4[3] = Byte.Parse(ipstring[3]);
-            IpRes = ip;
-            return ip4;
+            Console.WriteLine("Got request from: " + e.Host);
         }
     }
 }
