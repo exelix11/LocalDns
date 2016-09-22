@@ -75,7 +75,6 @@ namespace LocalDns
             {
                 string[] split = s.Split(',');
                 DnsSettings dns = new DnsSettings();
-                dns.Url = split[0].Trim();
                 switch (split[1].Trim().ToLower())
                 {
                     case "deny":
@@ -88,10 +87,18 @@ namespace LocalDns
                         dns.Mode = HandleMode.Redirect;
                         dns.Address = split[2].Trim();
                         break;
-                    default :
+                    default:
                         throw new Exception("Can't parse rules !");
                 }
-                res.Add(dns.Url, dns);
+                res.Add(split[0].Trim(), dns);
+                res.Add("www." + split[0].Trim(), dns);
+            }
+            Console.WriteLine(res.Count.ToString() + " rules loaded");
+            if (System.Diagnostics.Debugger.IsAttached)
+            {
+                List<string[]> ToPad = new List<string[]>();
+                foreach (string s in res.Keys.ToArray()) ToPad.Add( new string[] { s, res[s].Mode.ToString(), res[s].Address == null ? "" : res[s].Address });
+                Console.WriteLine(ConsoleUtility.PadElementsInLines(ToPad, 5));
             }
             return res;
         }
@@ -100,7 +107,7 @@ namespace LocalDns
         {
             Console.WriteLine("_____________________________________________");
             Console.WriteLine("Usage:");
-            Console.WriteLine("LocalDns.exe [rules, default is : Rules.txt] [BlockNotInList: True|False, default is: false] [Localhost, default is 127.0.0.1]");
+            Console.WriteLine("LocalDns.exe [rules, default is : Rules.txt] [BlockNotInList: True|False, default is: false] [Localhost, default is NXDOMAIN]");
             Console.WriteLine("The rules file must be a txt, each line must contain a rule in this format:\r\n"+
                 "*url*,*action: Deny|Allow|Redirect*,[Optional RedirectUrl]\r\n"+
                 "   Examples:\r\n"+
@@ -111,7 +118,7 @@ namespace LocalDns
                 "   Example.com,Allow\r\n"+
                 "   This will resolve Example.com to the real address, use this with BlockNotInList set to true, so every other site will be redirected to LocalHost");
             Console.WriteLine("BlockNotInList: If set to true will redirect to Localhost urls not in the rules file, else will return the real address");
-            Console.WriteLine("Localhost: the ip to redirect every blocked url");
+            Console.WriteLine("Localhost: the ip to redirect every blocked url (like 127.0.0.1),if set to NXDOMAIN the domain not found error will be sent instead of an ip");
             Console.ReadKey();
         }
 
@@ -124,5 +131,54 @@ namespace LocalDns
         {
             Console.WriteLine("Got request from: " + e.Host);
         }
+    }
+}
+
+// Source: http://dev.flauschig.ch/wordpress/?p=387
+public static class ConsoleUtility
+{
+    /// <summary>
+    /// Converts a List of string arrays to a string where each element in each line is correctly padded.
+    /// Make sure that each array contains the same amount of elements!
+    /// - Example without:
+    /// Title Name Street
+    /// Mr. Roman Sesamstreet
+    /// Mrs. Claudia Abbey Road
+    /// - Example with:
+    /// Title   Name      Street
+    /// Mr.     Roman     Sesamstreet
+    /// Mrs.    Claudia   Abbey Road
+    /// <param name="lines">List lines, where each line is an array of elements for that line.</param>
+    /// <param name="padding">Additional padding between each element (default = 1)</param>
+    /// </summary>
+    public static string PadElementsInLines(List<string[]> lines, int padding = 1)
+    {
+        // Calculate maximum numbers for each element accross all lines
+        var numElements = lines[0].Length;
+        var maxValues = new int[numElements];
+        for (int i = 0; i < numElements; i++)
+        {
+            maxValues[i] = lines.Max(x => x[i].Length) + padding;
+        }
+
+        var sb = new StringBuilder();
+        // Build the output
+        bool isFirst = true;
+        foreach (var line in lines)
+        {
+            if (!isFirst)
+            {
+                sb.AppendLine();
+            }
+            isFirst = false;
+
+            for (int i = 0; i < line.Length; i++)
+            {
+                var value = line[i];
+                // Append the value with padding of the maximum length of any value for this element
+                sb.Append(value.PadRight(maxValues[i]));
+            }
+        }
+        return sb.ToString();
     }
 }

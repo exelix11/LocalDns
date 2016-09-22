@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -20,7 +21,7 @@ namespace LocalDns
         public delegate void ConnectionRequestHandler(DnsEventArgs e);
         public delegate void ResolvedIpHandler(DnsEventArgs e);
         public Dictionary<string, DnsSettings> rules = new Dictionary<string, DnsSettings>();
-        public string LocalHostIp = "127.0.0.1";
+        public string LocalHostIp = "NXDOMAIN";
 
         public void RunDns()
         {
@@ -52,6 +53,7 @@ namespace LocalDns
                     ConnectionRequest(a);
                 }
                 string url = "";
+                Debug.WriteLine(rules.ContainsKey(fullname));
                 if (rules.ContainsKey(fullname))
                 {
                     if (rules[fullname].Mode == HandleMode.Allow) url = fullname;
@@ -62,9 +64,24 @@ namespace LocalDns
                     if (!DenyNotInRules) url = fullname;
                 }
                 string ip = LocalHostIp;
-                if (url != "")
-                    try { ip =  Dns.GetHostEntry(url).AddressList[0].ToString(); }
-                    catch { ip = LocalHostIp; }
+                if (url != "" && url!="NXDOMAIN")
+                {
+                    try
+                    {
+                        IPAddress a;
+                        if (!IPAddress.TryParse(url, out a))
+                        {
+                            var t = Dns.GetHostEntry(url).AddressList;
+                            Debug.WriteLine(t.Length);
+                            ip = t[0].ToString();
+                        }
+                        else ip = url;
+                    }
+                    catch 
+                    {
+                        ip = "NXDOMAIN";
+                    }
+                }
                 res = MakeResponsePacket(data, ip);
                 if (FireEvents && ResolvedIp != null)
                 {
@@ -104,7 +121,10 @@ namespace LocalDns
             //http://www.ccs.neu.edu/home/amislove/teaching/cs4700/fall09/handouts/project1-primer.pdf
             //Header
             ans.AddRange(new byte[] { Req[0], Req[1] });//ID
-            ans.AddRange(new byte[] { 0x81, 0x80 }); //OPCODE & RCODE etc...
+            if (Ip == "NXDOMAIN")
+                ans.AddRange(new byte[] { 0x81, 0x83 });
+            else
+                ans.AddRange(new byte[] { 0x81, 0x80 }); //OPCODE & RCODE etc...
             ans.AddRange(new byte[] { Req[4], Req[5] });//QDCount
             ans.AddRange(new byte[] { Req[4], Req[5] });//ANCount
             ans.AddRange(new byte[4]);//NSCount & ARCount
@@ -120,7 +140,6 @@ namespace LocalDns
 
     public struct DnsSettings
     {
-        public string Url; //youtube.com
         public string Address; //For redirect to
         public HandleMode Mode;
     }
@@ -138,7 +157,7 @@ namespace LocalDns
         Redirect
     }
 
-    public static  class Helper
+    public static class Helper
     {
         public static Dictionary<string, string> GetIPs()
         {
@@ -162,6 +181,7 @@ namespace LocalDns
 
        public static byte[] ParseIp(string ip)
         {
+            if (ip == "NXDOMAIN") return new byte[4];
             byte[] ip4 = new byte[4];
             string[] ipstring = ip.Split('.');
             ip4[0] = Byte.Parse(ipstring[0]);
@@ -180,8 +200,8 @@ namespace LocalDns
                 i -= 1;
             }
             string res = Encoding.ASCII.GetString(str);
-            if (res.ToLower() == "www") return null;
-            else return res;
+            //if (res.ToLower() == "www") return null;
+           /* else*/ return res;
         }
     }
 }
