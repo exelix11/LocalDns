@@ -1,1 +1,27 @@
-;placeholder
+;This is the rules file, each line must contain only one rule in this format:
+;*url*,*action: Deny|Allow|Redirect*,[Optional RedirectUrl]
+;Examples:
+;Example.com,Deny
+;   This will redirect every Examples.com query to the Localhost address (the default for localhost is "NXDOMAIN" which sends a domain not found error, you can use a custom one from the command line args)
+;Example.com,Redirect,Example2.com
+;   This will redirect Example.com to Example2.com, you can also use an ip address
+;Example.com,Allow
+;   This will resolve Example.com to its real address, use this with BlockNotInList set to true, so every other site will be redirected to Localhost
+
+;Wii u/3DS update servers
+nus.c.shop.nintendowifi.net,Deny
+nus.cdn.c.shop.nintendowifi.net,Deny
+nus.cdn.shop.wii.com,Deny
+nus.cdn.wup.shop.nintendo.net,Deny
+nus.wup.shop.nintendo.net,Deny
+cbvc.cdn.nintendo.net,Deny
+ecs.wup.shop.nintendo.net,Deny
+ccs.wup.shop.nintendo.net,Deny
+ias.wup.shop.nintendo.net,Deny
+tagaya.wup.shop.nintendo.net,Deny
+a23-65-181-75.deploy.static.akamaitechnologies.com,Deny
+a96-17-161-145.deploy.akamaitechnologies.com,Deny
+a184-50-229-158.deploy.static.akamaitechnologies.com,Deny
+a184-50-229-137.deploy.static.akamaitechnologies.com,Deny
+c.shop.nintendowifi.net,Deny
+cbvc.nintendo.net,Deny
