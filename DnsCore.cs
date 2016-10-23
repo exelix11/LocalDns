@@ -17,9 +17,11 @@ namespace LocalDns
         public event ServerReadyHandler ServerReady;
         public event ConnectionRequestHandler ConnectionRequest;
         public event ResolvedIpHandler ResolvedIp;
+        public event SocketExceptionHandler socketException;
         public delegate void ServerReadyHandler(Dictionary<string,string> e);
         public delegate void ConnectionRequestHandler(DnsEventArgs e);
         public delegate void ResolvedIpHandler(DnsEventArgs e);
+        public delegate void SocketExceptionHandler(SocketException ex);
         public Dictionary<string, DnsSettings> rules = new Dictionary<string, DnsSettings>();
         public string LocalHostIp = "NXDOMAIN";
 
@@ -33,7 +35,16 @@ namespace LocalDns
             Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             EndPoint e = new IPEndPoint(IPAddress.Any, 53);
             s.ReceiveBufferSize = 1023;
-            s.Bind(e);
+            try
+            {
+                s.Bind(e);
+            }
+            catch (SocketException ex)
+            {
+                if (!FireEvents || socketException == null) throw (ex);
+                else socketException(ex);
+                return null;
+            }
             if (FireEvents && ServerReady != null) ServerReady(Helper.GetIPs());
             while (true)
             {
@@ -131,7 +142,7 @@ namespace LocalDns
 
             for (int i = 12; i < Req.Length; i++) ans.Add(Req[i]);
             ans.AddRange(new byte[] { 0xC0, 0xC });
-            ans.AddRange(new byte[] { 0, 1, 0, 1, 0, 0, 0, 0x3c, 0, 4 }); //60 seconds
+            ans.AddRange(new byte[] { 0, 1, 0, 1, 0, 0, 0, 0x14, 0, 4 }); //20 seconds
             ans.AddRange(Helper.ParseIp(Ip));
 
             return ans.ToArray();
@@ -200,7 +211,7 @@ namespace LocalDns
                 i -= 1;
             }
             string res = Encoding.ASCII.GetString(str);
-            //if (res.ToLower() == "www") return null;
+            //if (res.ToLower() == "www") return null; Some sites do not work without www
            /* else*/ return res;
         }
     }

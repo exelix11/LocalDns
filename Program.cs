@@ -2,6 +2,11 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Security;
+using System.Net.Sockets;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -9,46 +14,136 @@ namespace LocalDns
 {
     class Program
     {
+        const uint ENABLE_QUICK_EDIT = 0x0040;
+        const int STD_INPUT_HANDLE = -10;
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr GetStdHandle(int nStdHandle);
+
+        [DllImport("kernel32.dll")]
+        static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+
+        [DllImport("kernel32.dll")]
+        static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+
+        static bool MONO = false;
+        static string RulesUrl = @"https://raw.githubusercontent.com/exelix11/LocalDns/master/Rules.txt";
         static void Main(string[] args)
         {
-            Console.Title = "LocalDns";
-            Console.WriteLine("LocalDns By Exelix11");
-            if (args.Length > 3) { PrintHelp(); return; }
+            MONO = Type.GetType("Mono.Runtime") != null;
+            if (!MONO) //Is running on windows ?
+            {
+                //this disables select in the cmd window
+                IntPtr consoleHandle = GetStdHandle(STD_INPUT_HANDLE);
+                uint consoleMode;
+                GetConsoleMode(consoleHandle, out consoleMode);
+                consoleMode &= ~ENABLE_QUICK_EDIT;
+                SetConsoleMode(consoleHandle, consoleMode);
+            }
+            
+            Console.Title = "LocalDNS";
+            Console.WriteLine("LocalDNS By Exelix11");
             Dictionary<string, DnsSettings> rules = null;
             DnsCore Dns = new LocalDns.DnsCore();
-            if (args.Length == 0)
+            #region parseArgs
+            bool DownloadRules = false;
+            if (args.Length != 0)
+            {
+                try
+                {
+                    for (int i = 0; i < args.Length; i++)
+                    {
+                        if ((args[i].StartsWith("-") || args[i].StartsWith(@"\") || args[i].StartsWith("/")) && args[i].Length > 1) args[i] = args[i].Remove(0, 1);
+                        switch (args[i].ToLower())
+                        {
+                            case "?":
+                            case "h":
+                            case "help":
+                                PrintHelp();
+                                return;
+                            case "downloadrules":
+                                DownloadRules = true;
+                                break;
+                            case "rules":
+                                if (DownloadRules) break;
+                                if (File.Exists(args[i + 1]))
+                                {
+                                    rules = ParseRules(args[i + 1]);
+                                }
+                                else
+                                {
+                                    Console.WriteLine("_____________________________________________\r\n" + args[i + 1] + " not found !");
+                                    PrintHelp();
+                                    return;
+                                }
+                                break;
+                            case "blocknotinrules":
+                                Dns.DenyNotInRules = args[i + 1].ToLower() == "true";
+                                break;
+                            case "localhost":
+                                Dns.LocalHostIp = args[i + 1].Trim();
+                                break;
+                        }
+                    }
+                }
+                catch
+                {
+                    Console.WriteLine("Can't parse args !");
+                    PrintHelp();
+                    return;
+                }
+            }
+            #endregion
+            if (DownloadRules)
+            {
+                Console.WriteLine("Downloading rules.....");
+                if (MONO) ServicePointManager.ServerCertificateValidationCallback = MyRemoteCertificateValidationCallback;
+                Dns.DenyNotInRules = false;
+                HttpWebRequest http = (HttpWebRequest)WebRequest.Create(RulesUrl);
+                WebResponse response = http.GetResponse();
+                StreamReader sr = new StreamReader(response.GetResponseStream());
+                string content = sr.ReadToEnd();
+                rules = ParseRules(content, false);
+            }
+            else if (rules == null)
             {
                 if (File.Exists("Rules.txt"))
                 {
                     rules = ParseRules("Rules.txt");
                 }
-                else { PrintHelp(); return; }
+                else
+                {
+                    Console.WriteLine("_____________________________________________\r\nRules.txt not found !");
+                    PrintHelp();
+                    return;
+                }
             }
-            else
+            if (System.Diagnostics.Debugger.IsAttached)
             {
-                if (File.Exists(args[0]))
-                {
-                    rules = ParseRules(args[0]);
-                }
-                else { Console.WriteLine(args[0] + "not found !"); PrintHelp(); return; }
-                if (args.Length > 1)
-                {
-                    Dns.DenyNotInRules = Convert.ToBoolean(args[1]);
-                }
-                if (args.Length == 3) Dns.LocalHostIp = args[2].Trim();
+                Console.WriteLine("BlockNotInRules: " + Dns.DenyNotInRules.ToString());
+                Console.WriteLine("localhost: " + Dns.LocalHostIp.ToString());
             }
-            if (rules != null) Dns.rules = rules;
+            Dns.rules = rules;
             Dns.FireEvents = true;
             Dns.ResolvedIp += ResolvedIp;
             Dns.ConnectionRequest += ConnectionRequest;
             Dns.ServerReady += ServerReady;
+            Dns.socketException += BindError;
             Dns.RunDns();
+        }
+
+        private static void BindError(SocketException ex)
+        {
+            Console.WriteLine("_____________________________________________");
+            Console.WriteLine("Couldn't bind to port 53.");
+            Console.WriteLine("It may be already in use, on windows check with \"netstat -ano\"\r\nIf you're on linux make sure to run with sudo");
+            Console.WriteLine("Error message: " + ex.Message);
+            Console.ReadLine();
         }
 
         private static void ServerReady(Dictionary<string, string> e)
         {
             Console.WriteLine("Starting DNS... (Press CTRL + C to close)");
-            Console.Title = "LocalDns, press CTRL + C to exit";
+            Console.Title = "LocalDNS, press CTRL + C to exit";
             Console.WriteLine("_____________________________________________");
             switch (e.Keys.Count)
             {
@@ -67,12 +162,13 @@ namespace LocalDns
             Console.WriteLine("_____________________________________________");
         }
 
-        static Dictionary<string, DnsSettings> ParseRules(string Filename)
+        static Dictionary<string, DnsSettings> ParseRules(string Filename, bool IsFilename = true)
         {
             Dictionary<string, DnsSettings> res = new Dictionary<string, DnsSettings>();
-            string[] rules = File.ReadAllLines(Filename);
+            string[] rules = IsFilename ? File.ReadAllLines(Filename) : Filename.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
             foreach (string s in rules)
             {
+                if (s.StartsWith(";") || s.Trim() == "") continue;
                 string[] split = s.Split(',');
                 DnsSettings dns = new DnsSettings();
                 switch (split[1].Trim().ToLower())
@@ -107,18 +203,11 @@ namespace LocalDns
         {
             Console.WriteLine("_____________________________________________");
             Console.WriteLine("Usage:");
-            Console.WriteLine("LocalDns.exe [rules, default is : Rules.txt] [BlockNotInList: True|False, default is: false] [Localhost, default is NXDOMAIN]");
-            Console.WriteLine("The rules file must be a txt, each line must contain a rule in this format:\r\n"+
-                "*url*,*action: Deny|Allow|Redirect*,[Optional RedirectUrl]\r\n"+
-                "   Examples:\r\n"+
-                "   Example.com,Deny\r\n" +
-                "   This will redirect every Examples.com query to the Localhost address\r\n" +
-                "   Example.com,Redirect,Examples2.com\r\n" +
-                "   This will redirect Example.com to Examples2.com\r\n"+
-                "   Example.com,Allow\r\n"+
-                "   This will resolve Example.com to the real address, use this with BlockNotInList set to true, so every other site will be redirected to LocalHost");
-            Console.WriteLine("BlockNotInList: If set to true will redirect to Localhost urls not in the rules file, else will return the real address");
-            Console.WriteLine("Localhost: the ip to redirect every blocked url (like 127.0.0.1),if set to NXDOMAIN the domain not found error will be sent instead of an ip");
+            Console.WriteLine("LocalDns.exe [-Rules Rules.txt] [-BlockNotInRules false] [-LocalHost NXDOMAIN]");
+            Console.WriteLine("-Localhost:  the ip to redirect every blocked url (like 127.0.0.1),by default is set to NXDOMAIN, by doing so the domain not found error will be sent instead of an ip");
+            Console.WriteLine("-DownloadRules: Uses the latest rules file from the github repo, doesn't overwrite Rules.txt, if set, -Rules and -BlockNotInRule will be ignored");
+            Console.WriteLine("-Rules : Specifies a rules file, if not set Rules.txt is loaded by default. Don't use spaces in the path !");
+            Console.WriteLine("-BlockNotInRules: only true or false, if set to true will redirect to Localhost urls not in the rules file, else will return the real address, by default is set to false");
             Console.ReadKey();
         }
 
@@ -130,6 +219,11 @@ namespace LocalDns
         private static void ConnectionRequest(DnsEventArgs e)
         {
             Console.WriteLine("Got request from: " + e.Host);
+        }
+
+        static public bool MyRemoteCertificateValidationCallback(System.Object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        {
+            return true; //This isn't a good thing to do, but to keep the code simple i prefer doing this, it will be used only on mono
         }
     }
 }
