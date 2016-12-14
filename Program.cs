@@ -8,7 +8,6 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace LocalDns
 {
@@ -38,10 +37,11 @@ namespace LocalDns
                 GetConsoleMode(consoleHandle, out consoleMode);
                 consoleMode &= ~ENABLE_QUICK_EDIT;
                 SetConsoleMode(consoleHandle, consoleMode);
-            }
-            
+            }            
             Console.Title = "LocalDNS";
-            Console.WriteLine("LocalDNS By Exelix11");
+            Console.WriteLine("LocalDNS 1.1 By Exelix11");
+            Console.WriteLine("https://github.com/exelix11/LocalDns");
+            Console.WriteLine("");
             Dictionary<string, DnsSettings> rules = null;
             DnsCore Dns = new LocalDns.DnsCore();
             #region parseArgs
