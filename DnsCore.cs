@@ -6,7 +6,6 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace LocalDns
 {
@@ -30,7 +29,7 @@ namespace LocalDns
             run();
         }
 
-        Task run()
+        void run()
         {
             Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             EndPoint e = new IPEndPoint(IPAddress.Any, 53);
@@ -43,7 +42,7 @@ namespace LocalDns
             {
                 if (!FireEvents || socketException == null) throw (ex);
                 else socketException(ex);
-                return null;
+                return;
             }
             if (FireEvents && ServerReady != null) ServerReady(Helper.GetIPs());
             while (true)
