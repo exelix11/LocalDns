@@ -25,3 +25,7 @@ a184-50-229-158.deploy.static.akamaitechnologies.com,Deny
 a184-50-229-137.deploy.static.akamaitechnologies.com,Deny
 c.shop.nintendowifi.net,Deny
 cbvc.nintendo.net,Deny
+
+;switch
+sun.hac.lp1.d4c.nintendo.net,Deny
+beach.hac.lp1.eshop.nintendo.net,Deny
