@@ -39,13 +39,13 @@ namespace LocalDns
                 SetConsoleMode(consoleHandle, consoleMode);
             }            
             Console.Title = "LocalDNS";
-            Console.WriteLine("LocalDNS 1.1 By Exelix11");
+            Console.WriteLine("LocalDNS 1.2 By Exelix11");
             Console.WriteLine("https://github.com/exelix11/LocalDns");
             Console.WriteLine("");
             Dictionary<string, DnsSettings> rules = null;
             DnsCore Dns = new LocalDns.DnsCore();
             #region parseArgs
-            bool DownloadRules = false;
+            bool DownloadRules = false; //Uhhh bad code :(
             if (args.Length != 0)
             {
                 try
@@ -80,7 +80,15 @@ namespace LocalDns
                                 Dns.DenyNotInRules = args[i + 1].ToLower() == "true";
                                 break;
                             case "localhost":
-                                Dns.LocalHostIp = args[i + 1].Trim();
+                                {
+                                    string ipStr = args[i + 1].Trim();
+                                    IPAddress ipAddr;
+                                    if (IPAddress.TryParse(ipStr, out ipAddr))
+                                    {
+                                        Dns.LocalHostIp = ipAddr;
+                                    }
+                                    else Console.WriteLine($"Warning: Couldn't parse '{ipStr}' as an IP address");
+                                }
                                 break;
                         }
                     }
@@ -213,10 +221,10 @@ namespace LocalDns
 
         private static void ResolvedIp(DnsEventArgs e)
         {
-            Console.WriteLine("Resolved: " + e.Url + " to: " + e.Host);
+            Console.WriteLine("Resolved: " + e.Url + " to: " + ((e.Host == IPAddress.None) ? "NXDOMAIN" : e.Host.ToString()));
         }
 
-        private static void ConnectionRequest(DnsEventArgs e)
+        private static void ConnectionRequest(DnsConnectionRequestEventArgs e)
         {
             Console.WriteLine("Got request from: " + e.Host);
         }

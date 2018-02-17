@@ -18,25 +18,30 @@ namespace LocalDns
         public event ResolvedIpHandler ResolvedIp;
         public event SocketExceptionHandler socketException;
         public delegate void ServerReadyHandler(Dictionary<string,string> e);
-        public delegate void ConnectionRequestHandler(DnsEventArgs e);
+        public delegate void ConnectionRequestHandler(DnsConnectionRequestEventArgs e);
         public delegate void ResolvedIpHandler(DnsEventArgs e);
         public delegate void SocketExceptionHandler(SocketException ex);
         public Dictionary<string, DnsSettings> rules = new Dictionary<string, DnsSettings>();
-        public string LocalHostIp = "NXDOMAIN";
+        public IPAddress LocalHostIp = IPAddress.None; // NXDOMAIN
+
+        Socket soc = null;
+        EndPoint endpoint = null;
 
         public void RunDns()
         {
-            run();
+            setup();
+            if (FireEvents && ServerReady != null) ServerReady(Helper.GetIPs());
+            DnsMainLoop();
         }
 
-        void run()
+        void setup()
         {
-            Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            EndPoint e = new IPEndPoint(IPAddress.Any, 53);
-            s.ReceiveBufferSize = 1023;
+            soc = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            endpoint = new IPEndPoint(IPAddress.Any, 53);
+            soc.ReceiveBufferSize = 1023;
             try
             {
-                s.Bind(e);
+                soc.Bind(endpoint);
             }
             catch (SocketException ex)
             {
@@ -44,63 +49,68 @@ namespace LocalDns
                 else socketException(ex);
                 return;
             }
-            if (FireEvents && ServerReady != null) ServerReady(Helper.GetIPs());
+        }
+
+        void DnsMainLoop()
+        {
             while (true)
             {
-                byte[] tdata = new byte[1024];
-                s.ReceiveFrom(tdata, SocketFlags.None, ref e);
-                int i = tdata.Length - 1;
-                while (tdata[i] == 0) i--;
-                byte[] data = new byte[i + 1];
-                Array.Copy(tdata, data, i + 1);
-                string fullname = string.Join(".", GetName(data).ToArray());
-                byte[] res;
-                if (FireEvents && ConnectionRequest != null)
+                byte[] data = new byte[1024];
+                soc.ReceiveFrom(data, SocketFlags.None, ref endpoint);
+                data = Helper.TrimArray(data);
+
+                procRequest(data);                
+            }
+        }
+
+        void procRequest(byte[] data)
+        {
+            string fullname = string.Join(".", GetName(data).ToArray());            
+            if (FireEvents && ConnectionRequest != null)
+            {
+                DnsConnectionRequestEventArgs a = new DnsConnectionRequestEventArgs { Host = endpoint.ToString(), Url = fullname };
+                ConnectionRequest(a);
+            }
+
+            string url = "";
+            if (rules.ContainsKey(fullname))
+            {
+                if (rules[fullname].Mode == HandleMode.Allow) url = fullname;
+                else if (rules[fullname].Mode == HandleMode.Redirect) url = rules[fullname].Address;
+                else url = "NXDOMAIN";
+            }
+            else
+            {
+                if (!DenyNotInRules) url = fullname;
+                else url = "NXDOMAIN";
+            }
+
+            IPAddress ip = LocalHostIp;
+            if (url != "" && url != "NXDOMAIN")
+            {
+                try
                 {
-                    DnsEventArgs a;
-                    a.Host = e.ToString();
-                    a.Url = fullname;
-                    ConnectionRequest(a);
-                }
-                string url = "";
-                Debug.WriteLine(rules.ContainsKey(fullname));
-                if (rules.ContainsKey(fullname))
-                {
-                    if (rules[fullname].Mode == HandleMode.Allow) url = fullname;
-                    else if (rules[fullname].Mode == HandleMode.Redirect) url = rules[fullname].Address;
-                }
-                else
-                {
-                    if (!DenyNotInRules) url = fullname;
-                }
-                string ip = LocalHostIp;
-                if (url != "" && url!="NXDOMAIN")
-                {
-                    try
+                    IPAddress address;
+                    if (!IPAddress.TryParse(url, out address))
                     {
-                        IPAddress a;
-                        if (!IPAddress.TryParse(url, out a))
-                        {
-                            var t = Dns.GetHostEntry(url).AddressList;
-                            Debug.WriteLine(t.Length);
-                            ip = t[0].ToString();
-                        }
-                        else ip = url;
+                        ip = Dns.GetHostEntry(url).AddressList[0];
                     }
-                    catch 
-                    {
-                        ip = "NXDOMAIN";
-                    }
+                    else ip = address;
                 }
-                res = MakeResponsePacket(data, ip);
-                if (FireEvents && ResolvedIp != null)
+                catch
                 {
-                    DnsEventArgs a;
-                    a.Host = ip;
-                    a.Url = fullname;
-                    ResolvedIp(a);
+                    ip = IPAddress.None;
                 }
-                s.SendTo(res, e);
+            }
+
+            byte[] res = MakeResponsePacket(data, ip);
+
+            soc.SendTo(res, endpoint);
+
+            if (FireEvents && ResolvedIp != null)
+            {
+                DnsEventArgs a = new DnsEventArgs() { Host = ip, Url = fullname };
+                ResolvedIp(a);
             }
         }
 
@@ -124,14 +134,14 @@ namespace LocalDns
             }
             return addr;
         }
-
-        public byte[] MakeResponsePacket(byte[] Req, string Ip)
+        
+        public byte[] MakeResponsePacket(byte[] Req, IPAddress Ip)
         {
             List<byte> ans = new List<byte>();
             //http://www.ccs.neu.edu/home/amislove/teaching/cs4700/fall09/handouts/project1-primer.pdf
             //Header
             ans.AddRange(new byte[] { Req[0], Req[1] });//ID
-            if (Ip == "NXDOMAIN")
+            if (Ip == IPAddress.None)
                 ans.AddRange(new byte[] { 0x81, 0x83 });
             else
                 ans.AddRange(new byte[] { 0x81, 0x80 }); //OPCODE & RCODE etc...
@@ -141,8 +151,12 @@ namespace LocalDns
 
             for (int i = 12; i < Req.Length; i++) ans.Add(Req[i]);
             ans.AddRange(new byte[] { 0xC0, 0xC });
-            ans.AddRange(new byte[] { 0, 1, 0, 1, 0, 0, 0, 0x14, 0, 4 }); //20 seconds
-            ans.AddRange(Helper.ParseIp(Ip));
+
+            if (Ip.AddressFamily == AddressFamily.InterNetworkV6)
+                ans.AddRange(new byte[] { 0, 0x1c, 0, 1, 0, 0, 0, 0x14, 0, 0x10  }); //20 seconds, 0x10 is ipv6 length
+            else
+                ans.AddRange(new byte[] { 0, 1, 0, 1, 0, 0, 0, 0x14, 0, 4 }); 
+            ans.AddRange(Ip.GetAddressBytes());
 
             return ans.ToArray();
         }
@@ -155,6 +169,12 @@ namespace LocalDns
     }
 
     public struct DnsEventArgs
+    {
+        public IPAddress Host;
+        public string Url;
+    }
+
+    public struct DnsConnectionRequestEventArgs
     {
         public string Host;
         public string Url;
@@ -189,16 +209,13 @@ namespace LocalDns
             return addresses;
         }
 
-       public static byte[] ParseIp(string ip)
+        public static byte[] TrimArray(byte[] arr)
         {
-            if (ip == "NXDOMAIN") return new byte[4];
-            byte[] ip4 = new byte[4];
-            string[] ipstring = ip.Split('.');
-            ip4[0] = Byte.Parse(ipstring[0]);
-            ip4[1] = Byte.Parse(ipstring[1]);
-            ip4[2] = Byte.Parse(ipstring[2]);
-            ip4[3] = Byte.Parse(ipstring[3]);
-            return ip4;
+            int i = arr.Length - 1;
+            while (arr[i] == 0) i--;
+            byte[] data = new byte[i + 1];
+            Array.Copy(arr, data, i + 1);
+            return data;
         }
 
         public static string TrimString(byte[] str)
