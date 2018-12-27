@@ -29,3 +29,36 @@ cbvc.nintendo.net,Deny
 ;switch
 sun.hac.lp1.d4c.nintendo.net,Deny
 beach.hac.lp1.eshop.nintendo.net,Deny
+ctest.cdn.nintendo.net,Redirect,95.216.149.205
+conntest.nintendowifi.net,Redirect,95.216.149.205
+*.nintendo.net,Deny
+*.nintendo.com,Deny
+*.nintendo.co.uk,Deny
+*.nintendo-europe.com,Deny
+*.nintendo.jp,Deny
+*.nintendo.co.jp,Deny
+*.nintendo.es,Deny
+*.nintendo.co.kr,Deny
+*.nintendo.tw,Deny
+*.nintendo.com.hk,Deny
+*.nintendo.com.au,Deny
+*.nintendo.co.nz,Deny
+*.nintendo.at,Deny
+*.nintendo.be,Deny
+*.nintendods.cz,Deny
+*.nintendo.dk,Deny
+*.nintendo.de,Deny
+*.nintendo.fi,Deny
+*.nintendo.fr,Deny
+*.nintendo.gr,Deny
+*.nintendo.hu,Deny
+*.nintendo.it,Deny
+*.nintendo.nl,Deny
+*.nintendo.no,Deny
+*.nintendo.pt,Deny
+*.nintendo.ru,Deny
+*.nintendo.co.za ,Deny
+*.nintendo.se,Deny
+*.nintendo.ch ,Deny
+*.google-analytics.com,Deny
+*.googletagmanager.com,Deny
