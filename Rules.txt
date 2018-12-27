@@ -32,7 +32,9 @@ aqua.hac.lp1.d4c.nintendo.net,Deny
 sun.hac.lp1.d4c.nintendo.net,Deny
 superfly.hac.lp1.d4c.nintendo.net,Deny
 beach.hac.lp1.eshop.nintendo.net,Deny
+aauth-lp1.ndas.srv.nintendo.net,Deny
 dauth-lp1.ndas.srv.nintendo.net,Deny
+api.accounts.nintendo.com,Deny
 ctest.cdn.nintendo.net,Redirect,95.216.149.205
 conntest.nintendowifi.net,Redirect,95.216.149.205
 *.nintendo.net,Deny
