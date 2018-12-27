@@ -8,7 +8,7 @@
 ;Example.com,Allow
 ;   This will resolve Example.com to its real address, use this with BlockNotInList set to true, so every other site will be redirected to Localhost
 
-;Wii u/3DS update servers
+;Wii U/3DS update servers
 ;------------------------
 nus.c.shop.nintendowifi.net,Deny
 nus.cdn.c.shop.nintendowifi.net,Deny
@@ -27,7 +27,25 @@ a184-50-229-137.deploy.static.akamaitechnologies.com,Deny
 c.shop.nintendowifi.net,Deny
 cbvc.nintendo.net,Deny
 
-;switch
+;PS3
+;---
+es.np.adproxy.ndmdhs.com,Deny
+nsx.sec.np.dl.playstation.net,Deny
+xmb-e.dl.playstation.net,Deny
+auth.np.ac.playstation.net,Deny
+*.np.stun.playstation.net,Deny
+ena.net.playstation.net,Deny
+*.ena.net.playstation.net,Deny
+*.ps3.update.playstation.net,Deny
+service.playstation.net,Deny
+*.service.playstation.net,Deny
+creepo.ww.hl.playstation.net,Deny
+*.creepo.ww.hl.playstation.net,Deny
+*.np.community.playstation.net,Deny 
+np.community.playstation.net,Deny
+manuals.playstation.net,Deny
+
+;Switch
 ;------
 ; - wifi connection -
 ctest.cdn.nintendo.net,Redirect,95.216.149.205
@@ -36,15 +54,18 @@ conntest.nintendowifi.net,Redirect,95.216.149.205
 aauth-lp1.ndas.srv.nintendo.net,Deny
 dauth-lp1.ndas.srv.nintendo.net,Deny
 api.accounts.nintendo.com,Deny
-; - games update - replace "Deny" by "Allow" to receive game update (BAN RISK!)
+; - game update - comment those as well as "*.nintendo.net" to receive game update (BAN RISK!)
+aqua.hac.lp1.d4c.nintendo.net,Deny
 atum.hac.lp1.d4c.nintendo.net,Deny
 superfly.hac.lp1.d4c.nintendo.net,Deny
 ; - system update -
 sun.hac.lp1.d4c.nintendo.net,Deny
 beach.hac.lp1.eshop.nintendo.net,Deny
-; - unknown -
+; - unknown - locked just in case
+tagaya.hac.lp1.eshop.nintendo.net,Deny
+receive-lp1.dg.srv.nintendo.net,Deny
+receive-lp1.er.srv.nintendo.net,Deny
 app-*.lp1.npns.srv.nintendo.net,Deny
-aqua.hac.lp1.d4c.nintendo.net,Deny
 ; - others -
 *.nintendo.net,Deny
 *.nintendo.com,Deny
