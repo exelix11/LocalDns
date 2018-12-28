@@ -205,7 +205,16 @@ namespace LocalDns
                 string domain = split[0].Trim();
                 if (domain.Contains("*"))
                 {
+                    // Escape all possible URI characters conflicting with Regex
                     domain = domain.Replace(".", "\\.");
+                    domain = domain.Replace("$", "\\$");
+                    domain = domain.Replace("[", "\\[");
+                    domain = domain.Replace("]", "\\]");
+                    domain = domain.Replace("(", "\\(");
+                    domain = domain.Replace(")", "\\)");
+                    domain = domain.Replace("+", "\\+");
+                    domain = domain.Replace("?", "\\?");
+                    // Replace "*" characters with ".*" which means any number of any character for Regexp
                     domain = domain.Replace("*", ".*");
                     StarRules.Add(new KeyValuePair<string, DnsSettings>(domain, dns));
                 }
