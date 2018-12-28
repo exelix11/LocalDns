@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace LocalDns
 {
@@ -21,7 +22,8 @@ namespace LocalDns
         public delegate void ConnectionRequestHandler(DnsConnectionRequestEventArgs e);
         public delegate void ResolvedIpHandler(DnsEventArgs e);
         public delegate void SocketExceptionHandler(SocketException ex);
-        public Dictionary<string, DnsSettings> rules = new Dictionary<string, DnsSettings>();
+        public Dictionary<string, DnsSettings> dicRules = new Dictionary<string, DnsSettings>();
+        public List<KeyValuePair<string, DnsSettings>> regRules = new List<KeyValuePair<string, DnsSettings>>();
         public IPAddress LocalHostIp = IPAddress.None; // NXDOMAIN
 
         Socket soc = null;
@@ -73,13 +75,33 @@ namespace LocalDns
             }
 
             string url = "";
-            if (rules.ContainsKey(fullname))
+            bool treated = false;
+
+            if (dicRules.ContainsKey(fullname))
             {
-                if (rules[fullname].Mode == HandleMode.Allow) url = fullname;
-                else if (rules[fullname].Mode == HandleMode.Redirect) url = rules[fullname].Address;
+                if (dicRules[fullname].Mode == HandleMode.Allow) url = fullname;
+                else if (dicRules[fullname].Mode == HandleMode.Redirect) url = dicRules[fullname].Address;
                 else url = "NXDOMAIN";
+                treated = true;
             }
-            else
+
+            if (!treated)
+            {
+                foreach (KeyValuePair<string, DnsSettings> rule in regRules)
+                {
+                    Regex regex = new Regex(rule.Key);
+                    if (!regex.IsMatch(fullname))
+                        continue;
+
+                    if (rule.Value.Mode == HandleMode.Allow) url = fullname;
+                    else if (rule.Value.Mode == HandleMode.Redirect) url = rule.Value.Address;
+                    else url = "NXDOMAIN";
+                    treated = true;
+                    break;
+                }
+            }
+
+            if (!treated)
             {
                 if (!DenyNotInRules) url = fullname;
                 else url = "NXDOMAIN";

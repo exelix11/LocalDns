@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -42,8 +42,11 @@ namespace LocalDns
             Console.WriteLine("LocalDNS 1.2 By Exelix11");
             Console.WriteLine("https://github.com/exelix11/LocalDns");
             Console.WriteLine("");
-            Dictionary<string, DnsSettings> rules = null;
+
+            Dictionary<string, DnsSettings> dicRules = null;
+            List<KeyValuePair<string, DnsSettings>> regRules = null;
             DnsCore Dns = new LocalDns.DnsCore();
+
             #region parseArgs
             bool DownloadRules = false; //Uhhh bad code :(
             if (args.Length != 0)
@@ -67,7 +70,7 @@ namespace LocalDns
                                 if (DownloadRules) break;
                                 if (File.Exists(args[i + 1]))
                                 {
-                                    rules = ParseRules(args[i + 1]);
+                                    ParseRules(args[i + 1], out dicRules, out regRules);
                                 }
                                 else
                                 {
@@ -87,7 +90,7 @@ namespace LocalDns
                                     {
                                         Dns.LocalHostIp = ipAddr;
                                     }
-                                    else Console.WriteLine($"Warning: Couldn't parse '{ipStr}' as an IP address");
+                                    else Console.WriteLine("Warning: Couldn't parse '{ipStr}' as an IP address");
                                 }
                                 break;
                         }
@@ -110,13 +113,13 @@ namespace LocalDns
                 WebResponse response = http.GetResponse();
                 StreamReader sr = new StreamReader(response.GetResponseStream());
                 string content = sr.ReadToEnd();
-                rules = ParseRules(content, false);
+                ParseRules(content, out dicRules, out regRules, false);
             }
-            else if (rules == null)
+            else if (dicRules == null)
             {
                 if (File.Exists("Rules.txt"))
                 {
-                    rules = ParseRules("Rules.txt");
+                    ParseRules("Rules.txt", out dicRules, out regRules);
                 }
                 else
                 {
@@ -130,7 +133,9 @@ namespace LocalDns
                 Console.WriteLine("BlockNotInRules: " + Dns.DenyNotInRules.ToString());
                 Console.WriteLine("localhost: " + Dns.LocalHostIp.ToString());
             }
-            Dns.rules = rules;
+
+            Dns.dicRules = dicRules;
+            Dns.regRules = regRules;
             Dns.FireEvents = true;
             Dns.ResolvedIp += ResolvedIp;
             Dns.ConnectionRequest += ConnectionRequest;
@@ -170,9 +175,11 @@ namespace LocalDns
             Console.WriteLine("_____________________________________________");
         }
 
-        static Dictionary<string, DnsSettings> ParseRules(string Filename, bool IsFilename = true)
+        static void ParseRules(string Filename, out Dictionary<string, DnsSettings> DicRules, out List<KeyValuePair<string, DnsSettings>> StarRules, bool IsFilename = true)
         {
-            Dictionary<string, DnsSettings> res = new Dictionary<string, DnsSettings>();
+            DicRules = new Dictionary<string,DnsSettings>();
+            StarRules = new List<KeyValuePair<string, DnsSettings>>();
+
             string[] rules = IsFilename ? File.ReadAllLines(Filename) : Filename.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.None);
             foreach (string s in rules)
             {
@@ -194,17 +201,38 @@ namespace LocalDns
                     default:
                         throw new Exception("Can't parse rules !");
                 }
-                res.Add(split[0].Trim(), dns);
-                res.Add("www." + split[0].Trim(), dns);
+
+                string domain = split[0].Trim();
+                if (domain.Contains("*"))
+                {
+                    // Escape all possible URI characters conflicting with Regex
+                    domain = domain.Replace(".", "\\.");
+                    domain = domain.Replace("$", "\\$");
+                    domain = domain.Replace("[", "\\[");
+                    domain = domain.Replace("]", "\\]");
+                    domain = domain.Replace("(", "\\(");
+                    domain = domain.Replace(")", "\\)");
+                    domain = domain.Replace("+", "\\+");
+                    domain = domain.Replace("?", "\\?");
+                    // Replace "*" characters with ".*" which means any number of any character for Regexp
+                    domain = domain.Replace("*", ".*");
+                    StarRules.Add(new KeyValuePair<string, DnsSettings>(domain, dns));
+                }
+                else
+                {
+                    DicRules.Add(domain, dns);
+                    DicRules.Add("www." + domain, dns);
+                }
             }
-            Console.WriteLine(res.Count.ToString() + " rules loaded");
+
+            Console.WriteLine(DicRules.Count.ToString() + " dictionary rules and " + StarRules.Count.ToString() + " star rules loaded");
             if (System.Diagnostics.Debugger.IsAttached)
             {
                 List<string[]> ToPad = new List<string[]>();
-                foreach (string s in res.Keys.ToArray()) ToPad.Add( new string[] { s, res[s].Mode.ToString(), res[s].Address == null ? "" : res[s].Address });
+                foreach (string s in DicRules.Keys.ToArray()) ToPad.Add(new string[] { s, DicRules[s].Mode.ToString(), DicRules[s].Address == null ? "" : DicRules[s].Address });
+                foreach (KeyValuePair<string, DnsSettings> rule in StarRules) ToPad.Add(new string[] { rule.Key, rule.Value.Mode.ToString(), rule.Value.Address == null ? "" : rule.Value.Address });
                 Console.WriteLine(ConsoleUtility.PadElementsInLines(ToPad, 5));
             }
-            return res;
         }
 
         static void PrintHelp()
